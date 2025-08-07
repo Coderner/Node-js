@@ -1,95 +1,107 @@
 const express = require("express");
 const users = require("./MOCK_DATA.json");
 const fs = require("fs");
-
+const mongoose = require("mongoose");
 const app = express();
 const PORT = 8000;
+
+//connection
+
+mongoose.connect("mongodb://127.0.0.1:27017/app-1")
+.then(()=>console.log("MongoDB Connected!"))
+.catch((err)=>{
+    console.log("Could not connect due to error: ",err);
+})
+
+//schema
+
+const userSchema = new mongoose.Schema({
+    firstName : {
+        type : String,
+        required : true
+    },
+    lastName : {
+        type: String
+    },
+    email: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    jobTitle: {
+        type: String,
+    },
+    gender:{
+        type:String
+    },
+}, {
+    timestamps:true
+});
+
+//model
+
+const User = mongoose.model("User",userSchema);
 
 //Routes
 
 //html like
-app.get("/users",(req,res)=>{
+app.get("/users",async(req,res)=>{
+    const allDbUsers = await User.find({});
     const html = `
     <ul>
-      ${users.map((user)=> `<li>${user?.first_name}</li>`).join('')}
+      ${allDbUsers.map((user)=> `<li>${user?.firstName} - ${user?.email}</li>`).join('')}
     </ul>
     `;
     res.send(html);
 });
 
 //api
-app.get("/api/users",(req,res)=>{
-    res.json(users);
+app.get("/api/users",async(req,res)=>{
+    const allDbUsers = await User.find({});
+    res.json(allDbUsers);
 });
 
 app.use(express.urlencoded({extended:false}));
 
-app.post("/api/users",(req,res)=>{
-    const val = req.body;
-    console.log(val);
-    users.push({
-        id: users.length+1,
-        first_name : val.first_name,
-        last_name: val.last_name,
-        email: val.email,
-        gender: val.gender,
-        job_title: val.job_title
+app.post("/api/users",async(req,res)=>{
+    const body = req.body;
+   
+    if(!body || !body.first_name || !body.email){
+        return res.status(400).json({err:"First Name and Email are required fields"});
+    }
+
+    const result = await User.create({
+       firstName : body.first_name,
+       lastName: body.last_name,
+       email: body.email,
+       gender: body.gender,
+       jobTitle: body.job_title
     });
-    fs.writeFile("./MOCK_DATA.json",JSON.stringify(users),(err, data)=>{
-        return res.json({status:"success", id:users.length})
-    })
+
+    console.log(result);
+
+    return res.status(201).json({message:"User created successfully"});    
 });
 
-app.get("/api/users/:id",(req,res)=>{
-    const id = Number(req.params.id);
-    const user = users.find((user)=>user?.id===id);
+app.get("/api/users/:id",async(req,res)=>{
+    const id = req.params.id;
+    const user = await User.findById(id);
     if(user===undefined)
       res.json("User not found!");
     res.json(user);
 });
 
 
-app.patch("/api/users/:id", (req,res)=>{
-    const id = Number(req.params.id);
-
-    const index = users.findIndex((user)=>user?.id===id);
-
-    if(index===-1)
-        return res.json(`No user with id ${id} found!`);
-
-    const val = req.body;
-
-    console.log(users[index]);
-    console.log(val);
-    console.log(val);
-    console.log({...users[index],...val});
-
-    users[index] = {...users[index],...val};
-
-    console.log(users[index]);
-
-    fs.writeFile("./MOCK_DATA.json", JSON.stringify(users),(err,data)=>{
-         res.send(`user with id ${id} updated successfully`);
-    });
-
-
+app.patch("/api/users/:id", async(req,res)=>{
+    const id = req.params.id;
+    await User.findByIdAndUpdate(id,{lastName:"Updated"});
+    return res.status(201).json({msg:"updated successfully!"});
 });
 
-app.delete("/api/users/:id", (req,res)=>{
-    const id = Number(req.params.id);
-
-    const index = users.findIndex((user)=>user?.id===id);
-
-    console.log(index);
-
-    if(index===-1)
-        return res.json(`No user with id ${id} found!`);
-
-    console.log(users.splice(index,1));
-
-    fs.writeFile("./MOCK_DATA.json",JSON.stringify(users),(err,data)=>{
-        return res.json(`user with id ${id} deleted successfully!`);
-    })
+app.delete("/api/users/:id", async(req,res)=>{
+    const id = req.params.id;
+    await User.findByIdAndDelete(id);
+    return res.status(200).json({msg:"deleted successfully!"});
 });
 
 //alternate way
